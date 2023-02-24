@@ -1,0 +1,36 @@
+using Statistics
+using DelimitedFiles
+using PrettyTables, Printf
+
+flux, t = ARGS[1], parse(Float64, ARGS[2])
+exclude_shock = parse(Bool, ARGS[3])
+path = "./misc/output/$(flux)/t=$(t)/"
+
+l1(x, y) = mean(abs.(x - y))
+l2(x, y) = sqrt(mean((x - y) .^ 2))
+l∞(x, y) = maximum(abs.(x - y))
+
+N = [20, 40, 80, 160, 320, 640]
+data = zeros(Float64, (length(N), 6))
+# compute error
+for i in eachindex(N)
+    u, u_exact = readdlm(path * "u_N=$(N[i]).csv"), readdlm(path * "u_exact_N=$(N[i]).csv")
+    if exclude_shock
+        x = LinRange(0, 2π, N[i] + 1)
+        shock_position = π + 2 / 3
+        u, u_exact = u[abs.(x .- shock_position).>=1], u_exact[abs.(x .- shock_position).>=1]
+    end
+    data[i, 1], data[i, 3], data[i, 5] = l1(u, u_exact), l2(u, u_exact), l∞(u, u_exact)
+end
+# compute order
+for i = 2:length(N)
+    data[i, 2] = log2(data[i-1, 1] / data[i, 1])
+    data[i, 4] = log2(data[i-1, 3] / data[i, 3])
+    data[i, 6] = log2(data[i-1, 5] / data[i, 5])
+end
+
+formatters = (v, i, j) -> mod(j, 2) == 1 ? ft_printf("%.2e")(v, i, j) : ft_printf("%.2f")(v, i, j)
+pretty_table(data, header=["L_1"; "Order"; "L_2"; "Order"; "L_∞"; "Order"], formatters=(formatters, ft_nonothing))
+path = "misc/table/"
+suffix = exclude_shock ? "_es" : ""
+writedlm(path * "$(flux)_t=$(t)" * suffix * ".csv", data, ",")
