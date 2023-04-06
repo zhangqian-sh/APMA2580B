@@ -82,7 +82,7 @@ function reconstruction_WENO!(u⁺, u⁻, u)
     # stencil size = 3
     stencil_size = 3
     # reconstruction coefficents
-    rcl = [
+    rc = [
         1/3 -7/6 11/6
         -1/6 5/6 1/3
         1/3 5/6 -1/6
@@ -100,52 +100,30 @@ function reconstruction_WENO!(u⁺, u⁻, u)
         1 0 -1
         3 -4 1
     ]
-    rcr = Array([
-        -1/6 5/6 1/3
-        1/3 5/6 -1/6
-        11/6 -7/6 1/3
-    ])
 
+    # temp variables
     u_temp = zeros(Float64, stencil_size)
     β = zeros(Float64, stencil_size)
-    # compute u⁻
+    w̃ = zeros(Float64, stencil_size)
+
+    function WENO_u⁻(u)
+        for l = 1:stencil_size
+            u_temp[l] = dot(rc[l, :], u[l:l+stencil_size-1])
+            β[l] = β_mul_symmetric * dot(β_comp_symmetric[l, :], u[l:l+stencil_size-1])^2 +
+                   β_mul_asymmetric * dot(β_comp_asymmetric[l, :], u[l:l+stencil_size-1])^2
+        end
+        for l = 1:stencil_size
+            w̃[l] = γ[l] / (β[l] + ϵ)^2
+        end
+        w = w̃ / sum(w̃)
+        dot(w, u_temp)
+    end
+
     for i = 1:Nₓ
-        # u_temp is for u_{j+1/2}^- = u⁻[j+1]
-        for l = 1:stencil_size
-            u_stencil = [u[periodic(i - (stencil_size - l) + k)] for k = 0:stencil_size-1]
-            u_temp[l] = dot(rcl[l, :], u_stencil)
-        end
-        # beta for smoothness
-        for l = 1:stencil_size
-            u_stencil = [u[periodic(i - (stencil_size - l) + k)] for k = 0:stencil_size-1]
-            β[l] = β_mul_symmetric * dot(β_comp_symmetric[l, :], u_stencil)^2 +
-                   β_mul_asymmetric * dot(β_comp_asymmetric[l, :], u_stencil)^2
-        end
-        # w for weighted summation
-        w_tilde = [γ[l] / (β[l] + ϵ)^2 for l = 1:stencil_size]
-        w = w_tilde / sum(w_tilde)
-        u⁻[i+1] = dot(w, u_temp)
+        u⁻[i+1] = WENO_u⁻([u[periodic(i + k)] for k = -(stencil_size - 1):(stencil_size-1)])
+        u⁺[i] = WENO_u⁻([u[periodic(i + k)] for k = (stencil_size-1):-1:-(stencil_size - 1)])
     end
     u⁻[1] = u⁻[end]
-
-    # compute u⁺
-    for i = 1:Nₓ
-        # u_temp is for u_{j-1/2}^+ = u⁺[j]
-        for l = 1:stencil_size
-            u_stencil = [u[periodic(i - (stencil_size - l) + k)] for k = 0:stencil_size-1]
-            u_temp[l] = dot(rcr[l, :], u_stencil)
-        end
-        # beta for smoothness
-        for l = 1:stencil_size
-            u_stencil = [u[periodic(i - (stencil_size - l) + k)] for k = 0:stencil_size-1]
-            β[l] = β_mul_symmetric * dot(β_comp_symmetric[stencil_size-l+1, :], u_stencil)^2 +
-                   β_mul_asymmetric * dot(β_comp_asymmetric[stencil_size-l+1, :], u_stencil)^2
-        end
-        # w for weighted summation
-        w_tilde = [reverse(γ)[l] / (β[l] + ϵ)^2 for l = 1:stencil_size]
-        w = w_tilde / sum(w_tilde)
-        u⁺[i] = dot(w, u_temp)
-    end
     u⁺[end] = u⁺[1]
     u⁺, u⁻
 end

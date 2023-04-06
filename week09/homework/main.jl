@@ -24,7 +24,7 @@ function solve(u)
     t = 0
     Nₓ = length(u)
     Δx = 2π / Nₓ
-    Δt = λ_max * Δx
+    Δt = λ_max * Δx^(5 / 3)
     λ = Δt / Δx
 
     u⁺, u⁻ = zeros(Float64, Nₓ + 1), zeros(Float64, Nₓ + 1)
